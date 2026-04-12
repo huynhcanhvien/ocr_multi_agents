@@ -33,7 +33,9 @@ class OrganizeWorkflow:
             local_path = self.download_dir / res.file_path
             local_path.parent.mkdir(parents=True, exist_ok=True)
             saved_path = self.provider.download_file(res.token, str(local_path))
-            local_files.append({"path": saved_path, "name": res.file_path.split('/')[-1]})
+            # Nếu path trả về dạng windows backslash, fix lại.
+            pure_name = res.file_path.replace('\\', '/').split('/')[-1]
+            local_files.append({"path": saved_path, "name": pure_name})
 
         # --- BƯỚC 2: CHẾ BIẾN DỮ LIỆU & LẤY KEYWORD ---
         enhanced_file_list = []
@@ -52,47 +54,69 @@ class OrganizeWorkflow:
                 return {
                     "success": True,
                     "file_name": file_name,
-                    "thought_log": f"[Cache HIT] Bỏ qua trích xuất, dùng lại kết quả cũ. Log: {cached_thought}",
+                    "thought_log": f"[Cache HIT] Skipping extraction, reusing cached result. Log: {cached_thought}",
                     "keywords": cached_keywords
                 }
             
             try:
                 chunks = parse_file(file_path)
                 if not chunks:
-                    return {"success": False, "file_name": file_name, "error": "Tập tin rỗng"}
+                    return {"success": False, "file_name": file_name, "error": "Empty file"}
                 
                 content_blocks = []
-                # Chỉ lấy 3 chunk đầu tiên để tránh bị quá tải Token, 3 trang là đủ biết file là gì.
-                for idx, chunk in enumerate(chunks[:3]):
-                    if chunk.chunk_type == "image":
-                        content_blocks.append({
-                            "type": "text",
-                            "text": f"\n- Trang {idx+1} (Hình ảnh đính kèm):"
-                        })
-                        content_blocks.append({
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{chunk.content}",
-                                "detail": "auto"
-                            }
-                        })
-                    else:
-                        text_excerpt = chunk.content[:3000]
-                        content_blocks.append({
-                            "type": "text",
-                            "text": f"\n- Trang {idx+1} (Dạng Văn bản):\n{text_excerpt}..."
-                        })
+                offset = 0
+                step = 3
+                max_iterations = 5
+                iteration = 0
                 
-                kw_result = self.keyword_extractor.extract_keywords(content_blocks)
+                last_kw_result = None
                 
-                kws_str = ", ".join(kw_result.keywords)
+                while iteration < max_iterations and offset < len(chunks):
+                    current_chunks = chunks[offset : offset + step]
+                    if not current_chunks:
+                        break
+                        
+                    for idx, chunk in enumerate(current_chunks):
+                        actual_page = offset + idx + 1
+                        if chunk.chunk_type == "image":
+                            content_blocks.append({
+                                "type": "text",
+                                "text": f"\n- Page {actual_page} (Image attachment):"
+                            })
+                            content_blocks.append({
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{chunk.content}",
+                                    "detail": "auto"
+                                }
+                            })
+                        else:
+                            text_excerpt = chunk.content[:3000]
+                            content_blocks.append({
+                                "type": "text",
+                                "text": f"\n- Page {actual_page} (Text content):\n{text_excerpt}..."
+                            })
+                    
+                    kw_result = self.keyword_extractor.extract_keywords(content_blocks)
+                    last_kw_result = kw_result
+                    
+                    if not kw_result.needs_more_chunks:
+                        # Đã tự tin xác định được loại tài liệu, không cần lật trang thêm
+                        break 
+                        
+                    offset += step
+                    iteration += 1
+                
+                kws_str = ", ".join(last_kw_result.keywords) if last_kw_result else ""
+                thought_log = last_kw_result.thought_log if last_kw_result else "Document has no content."
+                
                 CacheManager.update_cache(file_name, "keywords", kws_str)
-                CacheManager.update_cache(file_name, "keyword_thought_log", kw_result.thought_log)
+                CacheManager.update_cache(file_name, "keyword_thought_log", thought_log)
                 
                 return {
                     "success": True, 
                     "file_name": file_name, 
-                    "thought_log": kw_result.thought_log, 
+                    "thought_log": thought_log, 
                     "keywords": kws_str
                 }
             except Exception as e:
@@ -104,7 +128,7 @@ class OrganizeWorkflow:
             
         for res in results:
             if res["success"]:
-                enhanced_file_list.append(f"{res['file_name']} (Tóm tắt nội dung/Keyword: {res['keywords']})")
+                enhanced_file_list.append(f"{res['file_name']} (Content Summary / Keywords: {res['keywords']})")
                 full_thought_logs.append(f"[KeywordExtractor - {res['file_name']}]: {res['thought_log']}")
             else:
                 if "error" in res and res["error"] != "No text":
@@ -121,7 +145,7 @@ class OrganizeWorkflow:
         while attempt < max_attempts and not is_acceptable:
             attempt += 1
             if issues_history:
-                feedback = "\n\n[LƯU Ý TỪ REVIEWER LẦN TRƯỚC]:\n- " + "\n- ".join(issues_history)
+                feedback = "\n\n[REVIEWER FEEDBACK FROM PREVIOUS ROUND]:\n- " + "\n- ".join(issues_history)
                 prompt_with_feedback = task.prompt_template + feedback
             else:
                 prompt_with_feedback = task.prompt_template
@@ -132,10 +156,39 @@ class OrganizeWorkflow:
             review = self.reviewer.review_organize(task.prompt_template, result.thought_log)
             if review.is_acceptable:
                 is_acceptable = True
-                full_thought_logs.append(f"[FileOrganizer - Lần {attempt}]: {result.thought_log}\n[Reviewer Thẩm định]: OK. Chấp nhận.")
+                full_thought_logs.append(f"[FileOrganizer - Attempt {attempt}]: {result.thought_log}\n[Reviewer Audit]: OK. Accepted.")
+                
+                # --- BƯỚC: LƯU VÀO FOLDER VẬT LÝ ---
+                agent_logger.info("Đang thực hiện phân bổ file vật lý vào thư mục cục bộ...")
+                import shutil
+                organized_dir = self.download_dir / "organized_output" / task.task_id
+                
+                name_to_path = {f["name"]: f["path"] for f in local_files}
+                
+                try:
+                    for allocation in result.file_allocations:
+                        filename = allocation.file_name
+                        folder_desc = allocation.folder_name
+                        
+                        if filename in name_to_path:
+                            # Trích xuất mỗi tên thư mục (bỏ đoạn mô tả đi) cho gọn gàng và tránh ký tự đặc biệt của Windows
+                            clean_folder_name = folder_desc.split(":")[0].strip()
+                            # Clean string cho chắc ăn với Windows
+                            clean_folder_name = "".join(c for c in clean_folder_name if c not in r'\/:*?"<>|')
+                            
+                            target_folder = organized_dir / clean_folder_name
+                            target_folder.mkdir(parents=True, exist_ok=True)
+                            
+                            src_path = name_to_path[filename]
+                            dst_path = target_folder / filename
+                            shutil.copy2(src_path, dst_path)
+                            agent_logger.debug(f"Đã tải {filename} vào '{clean_folder_name}'")
+                    agent_logger.info(f"Đã lưu ổ cứng thành công tại {organized_dir}")
+                except Exception as e:
+                    agent_logger.error(f"Lỗi khi di chuyển file vật lý: {e}")
             else:
                 issues_history.extend(review.issues)
-                full_thought_logs.append(f"[FileOrganizer - Lần {attempt}]: {result.thought_log}\n[Reviewer TỪ CHỐI]: {review.issues}")
+                full_thought_logs.append(f"[FileOrganizer - Attempt {attempt}]: {result.thought_log}\n[Reviewer REJECTED]: {review.issues}")
                 agent_logger.warning(f"⚠️ Reviewer phát hiện lỗi phân loại: {review.issues}. Yêu cầu FileOrganizer sửa lỗi...")
 
         # Nộp bài

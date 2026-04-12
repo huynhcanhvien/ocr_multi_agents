@@ -3,24 +3,24 @@ from unittest.mock import patch
 from core.parsers.file_router import parse_file
 from core.agents.task_router import TaskRouterAgent
 from core.agents.file_locator import FileLocatorAgent
-from core.agents.base_agent import BaseAgent # Hoặc ExtractorAgent cụ thể của bạn
+from core.agents.base_agent import BaseAgent # Or your specific ExtractorAgent
 
 class TestQAFlow:
 
     def test_full_qa_extract_flow(self):
-        # Giả sử ta có yêu cầu về nội dung trong file PDF
-        user_query = "Dự án này có tên là gì và do ai thực hiện?"
+        # Suppose we have a request about the PDF content
+        user_query = "What is the name of this project and who is implementing it?"
         pdf_path = "tests/sample_data/tai_lieu_dac_ta.pdf"
         
-        # 1. Parse dữ liệu (Chuyển PDF thành Vision Chunks)
+        # 1. Parse data (Convert PDF to Vision Chunks)
         chunks = parse_file(pdf_path)
         
-        # 2. Router nhận diện Task
+        # 2. Router identifies Task
         router = TaskRouterAgent()
         route_result = router.classify_task(user_query)
         assert route_result.task_type == "QA"
         
-        # 3. Trinh sát (File Locator) với vòng lặp Chunk
+        # 3. Analyzer (File Locator) with Chunk loop
         locator = FileLocatorAgent()
         target_file_names = set()
         
@@ -35,7 +35,7 @@ class TestQAFlow:
         while active_files and loop_count < 3:
             loop_count += 1
             user_content_blocks = [
-                {"type": "text", "text": f"<Yêu cầu của Đề bài>\n{user_query}\n\n<Danh sách Tài liệu và Nội dung hiện tại>\n"}
+                {"type": "text", "text": f"<Task Instruction>\n{user_query}\n\n<Document List and Current Content>\n"}
             ]
             for fname in active_files:
                 idx = file_read_index[fname]
@@ -44,7 +44,7 @@ class TestQAFlow:
                     if c.chunk_type == "image":
                         user_content_blocks.append({
                             "type": "text",
-                            "text": f"\n- File: {fname} (Trang/Chunk {idx+1}) | Nội dung Hình ảnh đính kèm:"
+                            "text": f"\n- File: {fname} (Page/Chunk {idx+1}) | Attached image content:"
                         })
                         user_content_blocks.append({
                             "type": "image_url",
@@ -57,14 +57,14 @@ class TestQAFlow:
                         text_excerpt = c.content[:1500]
                         user_content_blocks.append({
                             "type": "text",
-                            "text": f"\n- File: {fname} (Trang/Chunk {idx+1}) | Nội dung Văn bản:\n{text_excerpt}..."
+                            "text": f"\n- File: {fname} (Page/Chunk {idx+1}) | Text content:\n{text_excerpt}..."
                         })
                 else:
-                    user_content_blocks.append({"type": "text", "text": f"\n- File: {fname} | [ĐẾN CUỐI]\n"})
+                    user_content_blocks.append({"type": "text", "text": f"\n- File: {fname} | [END OF DOCUMENT CONTENT]\n"})
             
             user_content_blocks.append({
                 "type": "text",
-                "text": "\nPhân tích nội dung. Hãy xác định những file nào chắc chắn cần thiết, chắc chắn loại, và cần đọc thêm trang kế tiếp."
+                "text": "\nAnalyze content. Determine which files are definitely needed, definitely excluded, and need the next page read."
             })
                     
             locate_result = locator.locate_files_advanced(user_content_blocks)
@@ -82,18 +82,18 @@ class TestQAFlow:
                     next_active_files.add(fname)
             active_files = next_active_files
         
-        # Nếu test đúng, nó sẽ quét xong và không bị crash.
+        # If test is correct, it will finish scanning without crashing.
         assert target_file_names is not None
         
-        # 4. QA/Extractor Agent đọc nội dung cụ thể
-        # Ở đây ta gọi trực tiếp một Agent xử lý vision để test khả năng đọc
+        # 4. QA/Extractor Agent reads specific content
+        # Here we directly call a vision agent to test reading capability
         qa_agent = BaseAgent(agent_name="QA_Tester", temperature=1.0) 
         
-        # Giả sử ta gửi trang đầu tiên (thường chứa tên dự án) cho AI
-        system_msg = "Bạn là chuyên gia đọc tài liệu xây dựng."
-        user_msg = f"Dựa vào ảnh sau, trả lời câu hỏi: {user_query}"
+        # Suppose we send the first page (usually contains project name) to AI
+        system_msg = "You are a construction document reading expert."
+        user_msg = f"Based on this image, answer the question: {user_query}"
         
-        # Gửi kèm ảnh Base64 từ chunk bằng tham số image_base64 hỗ trợ chuẩn Vision
+        # Send attached Base64 image from chunk via image_base64 parameter for Vision standard
         response = qa_agent.call_llm(
             system_prompt=system_msg, 
             user_prompt=user_msg, 
@@ -101,4 +101,4 @@ class TestQAFlow:
         )
         
         assert response is not None
-        print(f"\nLuồng QA OK. AI phản hồi: {response[:100]}...")
+        print(f"\nQA flow OK. AI response: {response[:100]}...")

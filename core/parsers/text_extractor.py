@@ -19,7 +19,7 @@ def extract_text_chunks(file_path: str) -> list[DocumentChunk]:
                 if para.text.strip():
                     full_text.append(para.text.strip())
             
-            # Đọc thêm table trong word (nếu có)
+            # Read tables in Word document (if any)
             for table in doc.tables:
                 for row in table.rows:
                     row_data = [cell.text.strip() for cell in row.cells if cell.text.strip()]
@@ -33,11 +33,11 @@ def extract_text_chunks(file_path: str) -> list[DocumentChunk]:
                 file_name=path.name,
                 page_number=1
             ))
-            agent_logger.success(f"Đã trích xuất chữ từ file Word {path.name}.")
+            agent_logger.success(f"Extracted text from Word file {path.name}.")
             
         elif path.suffix.lower() == '.doc':
-            # Ghi chú: Định dạng .doc cũ (nhị phân) không được hỗ trợ chính thức bởi python-docx.
-            # Chúng ta sẽ thử catch-all (nếu file thực chất là docx nhưng bị đối tên thành .doc)
+            # Note: The old out-of-date .doc format (binary) is not officially supported by python-docx.
+            # We will try a catch-all (in case the file is actually a docx but renamed to .doc)
             try:
                 doc = docx.Document(file_path)
                 full_text = [para.text.strip() for para in doc.paragraphs if para.text.strip()]
@@ -45,37 +45,37 @@ def extract_text_chunks(file_path: str) -> list[DocumentChunk]:
                 chunks.append(DocumentChunk(
                     chunk_type="text", content=content, file_name=path.name, page_number=1
                 ))
-                agent_logger.success(f"Đã đọc được {path.name} qua python-docx (do thực chất cấu trúc là XML).")
+                agent_logger.success(f"Read {path.name} via python-docx (since it is actually structured as XML).")
             except Exception:
-                # Nếu thực sự là file binary OLE .doc cũ, ta dùng mẹo quét chuỗi printable text cơ bản
-                agent_logger.warning(f"File {path.name} là dạng .doc cũ. Dùng fallback đọc raw text...")
+                # If it's truly an old binary OLE .doc file, we use a trick to scan basic printable text
+                agent_logger.warning(f"File {path.name} is old .doc format. Using fallback to read raw text...")
                 with open(file_path, "rb") as f:
                     content_bytes = f.read()
                     
                 import string
-                # Lọc ra các ký tự ASCII in được và một số ký tự Unicode cơ bản
+                # Filter out printable ASCII characters and basic Unicode characters
                 printable = set(string.printable.encode())
                 extracted = []
                 for b in content_bytes:
                     if b in printable:
                         extracted.append(chr(b))
-                    elif b > 127: # Chấp nhận đại một số bytes utf-8 có thể
+                    elif b > 127: # Blindly accept some possible utf-8 bytes
                         extracted.append(" ")
                         
                 raw_string = "".join(extracted)
-                # Dọn dẹp khoảng trắng
+                # Clean up whitespaces
                 words = [w for w in raw_string.split() if len(w) > 3]
                 content = " ".join(words)
                 
                 if len(content) > 0:
                     chunks.append(DocumentChunk(
                         chunk_type="text", 
-                        content=f"[WARNING: Đọc thô từ .doc binary, chữ có thể dính vào nhau hoặc mất dấu]\n{content}", 
+                        content=f"[WARNING: Read raw from .doc binary, text might be garbled or missing formatting]\n{content}", 
                         file_name=path.name, 
                         page_number=1
                     ))
                 else:
-                    raise ValueError("Không tìm thấy text nào sau khi parse raw binary.")
+                    raise ValueError("No text found after parsing raw binary.")
 
         elif path.suffix.lower() == '.txt':
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -83,10 +83,10 @@ def extract_text_chunks(file_path: str) -> list[DocumentChunk]:
             chunks.append(DocumentChunk(
                 chunk_type="text", content=content, file_name=path.name, page_number=1
             ))
-            agent_logger.success(f"Đã trích xuất text từ file {path.name}.")
+            agent_logger.success(f"Extracted text from file {path.name}.")
 
         return chunks
         
     except Exception as e:
-        agent_logger.error(f"Lỗi phân tích file văn bản {path.name}: {e}")
-        raise ParsingError(f"Không thể parse file word/txt: {str(e)}")
+        agent_logger.error(f"Error parsing text file {path.name}: {e}")
+        raise ParsingError(f"Cannot parse word/txt file: {str(e)}")

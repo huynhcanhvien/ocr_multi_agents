@@ -6,7 +6,7 @@ from ..schemas.agent_outputs import TaskRoutingResult
 
 class TaskRouterAgent(BaseAgent):
     def __init__(self):
-        # Nhiệt độ 0.0 để kết quả luôn ổn định và logic nhất
+        # Temperature 0.0 so that results are always stable and highly logical
         super().__init__(agent_name="TaskRouter", temperature=settings.TEMP_ROUTER)
 
     def classify_task(self, task_prompt: str) -> TaskRoutingResult:

@@ -11,7 +11,7 @@ from ..utils.trace_logger import tracer
 T = TypeVar('T', bound=BaseModel)
 
 class BaseAgent:
-    """Class nền tảng cung cấp khả năng tư duy cho mọi Agent con."""
+    """Base class providing reasoning capabilities for all child Agents."""
     
     def __init__(self, agent_name: str, temperature: float):
         self.agent_name = agent_name
@@ -21,7 +21,7 @@ class BaseAgent:
         self.model = settings.GPT_MODEL_NAME
         self.temperature = temperature
 
-    @llm_retry() # Tự động thử lại nếu OpenAI quá tải hoặc sập mạng
+    @llm_retry() # Automatically retry if OpenAI is overloaded or network is down
     def call_llm(
         self, 
         system_prompt: str, 
@@ -30,11 +30,11 @@ class BaseAgent:
         image_base64: Optional[str] = None
     ) -> T | str:
         """
-        Gọi OpenAI API. 
-        Nếu có image_base64, nó sẽ được gửi dưới dạng Vision content block.
-        Nếu user_prompt là list, nó sẽ truyền thô mảng content block đó (hỗ trợ gom nhóm text và ảnh).
+        Call OpenAI API. 
+        If image_base64 is present, it will be sent as a Vision content block.
+        If user_prompt is a list, it will pass the raw array of content blocks (supports grouping text and images).
         """
-        agent_logger.debug(f"[{self.agent_name}] Đang phân tích...")
+        agent_logger.debug(f"[{self.agent_name}] Analyzing...")
         
         if isinstance(user_prompt, str):
             user_content = []
@@ -45,7 +45,7 @@ class BaseAgent:
                     "type": "image_url",
                     "image_url": {
                         "url": f"data:image/jpeg;base64,{image_base64}",
-                        "detail": "high" # Đảm bảo độ phân giải tốt nhất cho OCR
+                        "detail": "high" # Ensure optimal resolution for OCR
                     }
                 })
         else:
@@ -58,13 +58,13 @@ class BaseAgent:
 
         try:
             if response_model:
-                # Ép trả về JSON định dạng chuẩn (Structured Outputs)
+                # Force structured JSON format (Structured Outputs)
                 response = self.client.beta.chat.completions.parse(
                     model=self.model,
                     messages=messages,
                     response_format=response_model
                 )
-                agent_logger.success(f"[{self.agent_name}] Đã xuất dữ liệu chuẩn (Structured Output).")
+                agent_logger.success(f"[{self.agent_name}] Extracted standardized data (Structured Output).")
                 parsed_res = response.choices[0].message.parsed
                 tracer.add_agent_span(
                     agent_name=self.agent_name,
@@ -78,7 +78,7 @@ class BaseAgent:
                     model=self.model,
                     messages=messages,
                 )
-                agent_logger.success(f"[{self.agent_name}] Đã sinh xong phản hồi text.")
+                agent_logger.success(f"[{self.agent_name}] Text response generated successfully.")
                 text_res = response.choices[0].message.content
                 tracer.add_agent_span(
                     agent_name=self.agent_name,
@@ -89,5 +89,5 @@ class BaseAgent:
                 return text_res
                 
         except Exception as e:
-            agent_logger.error(f"[{self.agent_name}] Thất bại sau nhiều lần thử: {str(e)}")
-            raise LLMCommunicationError(f"Lỗi giao tiếp LLM tại {self.agent_name}: {str(e)}")
+            agent_logger.error(f"[{self.agent_name}] Failed after multiple retries: {str(e)}")
+            raise LLMCommunicationError(f"LLM communication error at {self.agent_name}: {str(e)}")

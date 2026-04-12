@@ -8,11 +8,11 @@ from ..schemas.data_types import DocumentChunk
 
 def parse_file(file_path: str) -> list[DocumentChunk]:
     """
-    Hệ thống định tuyến đa năng.
-    Nhận vào file tải về từ DataProvider -> Trả về danh sách DocumentChunk chuẩn.
+    Universal routing system.
+    Receives file downloaded from DataProvider -> Returns a list of standardized DocumentChunks.
     """
     path = Path(file_path)
-    agent_logger.info(f"Đang phân tích định dạng file: {path.name}")
+    agent_logger.info(f"Analyzing file format: {path.name}")
     
     ext = path.suffix.lower()
     
@@ -26,10 +26,10 @@ def parse_file(file_path: str) -> list[DocumentChunk]:
         return extract_text_chunks(file_path)
         
     elif ext == '.pdf':
-        # Lưu ý: Hiện tại đang ép toàn bộ PDF thành ảnh để giải quyết Prompt tiếng Nhật của bạn.
-        # Nếu sau này có file Text thuần, bạn có thể gọi thư viện fitz.get_text() ở đây.
+        # Note: Currently converting all PDFs to images to address your Japanese Prompt requirements.
+        # If there are pure text files in the future, you can use fitz.get_text() here.
         return extract_vision_chunks(file_path)
         
     else:
-        agent_logger.warning(f"Chưa hỗ trợ định dạng {ext} cho file {path.name}. Bỏ qua.")
+        agent_logger.warning(f"Format {ext} not supported for file {path.name}. Skipping.")
         return []

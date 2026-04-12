@@ -47,7 +47,7 @@ Your thought log is critical for scoring. Include:
 """
 
 def get_synthesizer_user_prompt(task_prompt: str, extracted_pieces: list[dict]) -> str:
-    # Chuẩn bị danh sách các mảnh thông tin đã tìm được để nhét vào prompt
+    # Prepare the list of extracted information chunks to insert into the prompt
     pieces_str = ""
     for i, piece in enumerate(extracted_pieces):
         pieces_str += f"\n--- Extracted Piece #{i+1} (Confidence: {piece['confidence_score']}) ---\n{piece['data']}\n"

@@ -8,7 +8,7 @@ from ..exceptions.agent_errors import ParsingError, LLMCommunicationError
 from ..parsers.file_router import parse_file
 from ..schemas.data_types import DocumentChunk
 
-# Import các Agent liên quan đến luồng QA
+# Import QA agents
 from ..agents import FileLocatorAgent, PlannerAgent, ExtractorAgent, SynthesizerAgent, ReviewerAgent
 from ..utils.cache_manager import CacheManager
 
@@ -25,9 +25,9 @@ class QAWorkflow:
         self.download_dir.mkdir(exist_ok=True)
 
     def execute(self, task):
-        agent_logger.info("Bắt đầu luồng Question Answering (QA)...")
+        agent_logger.info("Starting Question Answering (QA) workflow...")
         
-        # --- BƯỚC 1: TẢI FILE ---
+        # --- STEP 1: DOWNLOAD FILES ---
         local_files = []
         for res in task.resources:
             local_path = self.download_dir / res.file_path
@@ -35,14 +35,14 @@ class QAWorkflow:
             saved_path = self.provider.download_file(res.token, str(local_path))
             local_files.append(saved_path)
 
-        # --- BƯỚC 2: CHẾ BIẾN DỮ LIỆU ---
+        # --- STEP 2: PREPROCESS DATA ---
         all_chunks: List[DocumentChunk] = []
         for file_path in local_files:
             file_name = file_path.split('/')[-1] if isinstance(file_path, str) else Path(file_path).name
             
             cached_chunks = CacheManager.get_cached_item(file_name, "chunks")
             if cached_chunks:
-                agent_logger.info(f"⚡ [Cache HIT] Dùng lại dữ liệu parse của {file_name}.")
+                agent_logger.info(f"[Cache HIT] Reusing parsed data for {file_name}.")
                 all_chunks.extend(cached_chunks)
             else:
                 try:
@@ -50,30 +50,30 @@ class QAWorkflow:
                     CacheManager.update_cache(file_name, "chunks", chunks)
                     all_chunks.extend(chunks)
                 except ParsingError as e:
-                    agent_logger.error(f"Bỏ qua file lỗi {file_path}: {e}")
+                    agent_logger.error(f"Skipping errored file {file_path}: {e}")
 
-        # --- BƯỚC 3: TRINH SÁT (FILE LOCATOR) ---
+        # --- STEP 3: DOCUMENT ANALYSIS (FILE LOCATOR) ---
         target_file_names = set()
         
-        # Tạo mapping file_name -> list_of_chunks
+        # Create mapping: file_name -> list_of_chunks
         chunks_by_file = {}
         for chunk in all_chunks:
             chunks_by_file.setdefault(chunk.file_name, []).append(chunk)
             
-        # Khởi tạo context đọc (bắt đầu bằng index 0 cho mỗi file)
+        # Initialize reading context (start with index 0 for each file)
         file_read_index = {fname: 0 for fname in chunks_by_file.keys()}
-        active_files = set(chunks_by_file.keys())  # Các file cần phân tích
+        active_files = set(chunks_by_file.keys())  # Files to analyze
         
         max_locator_loops = 5
         loop_count = 0
         
-        agent_logger.info("Trinh sát đang quét mục tiêu...")
+        agent_logger.info("Analyzer is finding relevant files...")
         full_thought_logs = []
         
         while active_files and loop_count < max_locator_loops:
             loop_count += 1
             
-            # Khởi tạo mảng content blocks hỗ trợ Vision
+            # Initialize content blocks array for Vision support
             user_content_blocks = [
                 {"type": "text", "text": f"<Task Instruction>\n{task.prompt_template}\n\n<Document List and Current Content>\n"}
             ]
@@ -115,14 +115,14 @@ class QAWorkflow:
             locator_result = self.locator.locate_files_advanced(user_content_blocks)
             full_thought_logs.append(f"[FileLocator - Round {loop_count}]: {locator_result.reasoning}")
             
-            # Gộp các file target mà Agent đã chắc chắn
+            # Collect target files that Agent is confident about
             for f in locator_result.target_file_names:
                 target_file_names.add(f)
             
             if not locator_result.requires_more_info:
                 break
                 
-            # Cập nhật danh sách các file cần đọc thêm ở vòng lặp sau
+            # Update the list of files needing more reads in the next loop
             next_active_files = set()
             for fname in locator_result.files_needing_more_chunks:
                 if fname in chunks_by_file and file_read_index[fname] + 1 < len(chunks_by_file[fname]):
@@ -131,32 +131,32 @@ class QAWorkflow:
                     
             active_files = next_active_files
             
-        agent_logger.info(f"Mục tiêu đã khóa: {list(target_file_names)}")
+        agent_logger.info(f"Target files acquired: {list(target_file_names)}")
         
-        # Lọc chunk theo mục tiêu (Fallback nếu trinh sát xịt)
+        # Filter chunks by target (Fallback if analyzer fails)
         target_chunks = [c for c in all_chunks if c.file_name in target_file_names]
         if not target_chunks:
             target_chunks = all_chunks
 
-        # --- BƯỚC 4: LÊN KẾ HOẠCH ---
+        # --- STEP 4: EXTRACTION PLANNING ---
         plan = self.planner.create_extraction_plan(task.prompt_template)
         full_thought_logs.append(f"[Planner]: {plan.thought_log}")
         
         import concurrent.futures
         
-        # --- BƯỚC 5: XẠ THỦ TRÍCH XUẤT ---
+        # --- STEP 5: DOCUMENT EXTRACTION ---
         extracted_pieces = []
         
         def process_chunk_extraction(item):
             idx, chunk = item
-            agent_logger.debug(f"Đa luồng: Đang soi chunk {idx + 1}/{len(target_chunks)}...")
+            agent_logger.debug(f"Multi-threading: Scanning chunk {idx + 1}/{len(target_chunks)}...")
             try:
                 result = self.extractor.extract_from_chunk(chunk, plan.extraction_guidelines, plan.target_keywords)
                 return {"success": True, "idx": idx, "chunk": chunk, "result": result}
             except Exception as e:
                 return {"success": False, "idx": idx, "chunk": chunk, "error": str(e)}
 
-        agent_logger.info(f"Kích hoạt {len(target_chunks)} Xạ thủ trích xuất (Chế độ đa luồng)...")
+        agent_logger.info(f"Activating {len(target_chunks)} Extraction Workers (Multi-threading)...")
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             items = list(enumerate(target_chunks))
             results = executor.map(process_chunk_extraction, items)
@@ -174,10 +174,10 @@ class QAWorkflow:
                         "source": chunk.get_context_description()
                     })
             else:
-                agent_logger.error(f"Lỗi gọi LLM ở chunk {idx+1}: {res['error']}. Bỏ qua.")
+                agent_logger.error(f"LLM error on chunk {idx+1}: {res['error']}. Skipping.")
 
-        # --- BƯỚC 6: TỔNG HỢP CÓ REVIEW ---
-        agent_logger.info("🧠 Đang tổng hợp kết quả...")
+        # --- STEP 6: SYNTHESIS WITH REVIEW ---
+        agent_logger.info("Synthesizing results...")
         max_attempts = 2
         attempt = 0
         is_acceptable = False
@@ -193,7 +193,7 @@ class QAWorkflow:
                 
             final_result = self.synthesizer.synthesize_final_answer(prompt_with_feedback, extracted_pieces)
             
-            # Đánh giá
+            # Evaluate
             review = self.reviewer.review_qa(task.prompt_template, final_result.final_answers, final_result.thought_log)
             if review.is_acceptable:
                 is_acceptable = True
@@ -201,7 +201,7 @@ class QAWorkflow:
             else:
                 issues_history.extend(review.issues)
                 full_thought_logs.append(f"[Synthesizer - Attempt {attempt}]: {final_result.thought_log}\n[Reviewer REJECTED]: {review.issues}")
-                agent_logger.warning(f"⚠️ Reviewer phát hiện lỗi QA: {review.issues}. Yêu cầu Synthesizer viết lại đáp án...")
+                agent_logger.warning(f"Reviewer detected QA errors: {review.issues}. Requesting Synthesizer to rewrite answers...")
 
         submit_response = self.provider.submit_task(
             task_id=task.task_id,
@@ -209,5 +209,5 @@ class QAWorkflow:
             thought_log="\n".join(full_thought_logs),
             used_tools=["FileLocator", "Planner", "Extractor", "Synthesizer", "Reviewer"]
         )
-        agent_logger.info(f"Đã nộp bài QA! Server: {submit_response}")
+        agent_logger.info(f"Submitted QA task! Server response: {submit_response}")
 

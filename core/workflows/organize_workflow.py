@@ -25,19 +25,19 @@ class OrganizeWorkflow:
         self.download_dir.mkdir(exist_ok=True)
 
     def execute(self, task):
-        agent_logger.info("Bắt đầu luồng File Organization...")
+        agent_logger.info("Starting File Organization workflow...")
         
-        # --- BƯỚC 1: TẢI FILE ---
+        # --- STEP 1: DOWNLOAD FILES ---
         local_files = []
         for res in task.resources:
             local_path = self.download_dir / res.file_path
             local_path.parent.mkdir(parents=True, exist_ok=True)
             saved_path = self.provider.download_file(res.token, str(local_path))
-            # Nếu path trả về dạng windows backslash, fix lại.
+            # Fix path if returned as Windows backslash.
             pure_name = res.file_path.replace('\\', '/').split('/')[-1]
             local_files.append({"path": saved_path, "name": pure_name})
 
-        # --- BƯỚC 2: CHẾ BIẾN DỮ LIỆU & LẤY KEYWORD ---
+        # --- STEP 2: PREPROCESS DATA & EXTRACT KEYWORDS ---
         enhanced_file_list = []
         full_thought_logs = []
         
@@ -101,7 +101,7 @@ class OrganizeWorkflow:
                     last_kw_result = kw_result
                     
                     if not kw_result.needs_more_chunks:
-                        # Đã tự tin xác định được loại tài liệu, không cần lật trang thêm
+                        # Confidently determined document type, no need to flip more pages
                         break 
                         
                     offset += step
@@ -122,7 +122,7 @@ class OrganizeWorkflow:
             except Exception as e:
                 return {"success": False, "file_name": file_name, "error": str(e)}
 
-        agent_logger.info(f"Đang nạp {len(local_files)} files vào KeywordExtractor (Chế độ đa luồng)...")
+        agent_logger.info(f"Loading {len(local_files)} files into KeywordExtractor (Multi-threading)...")
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             results = executor.map(process_file_keyword, local_files)
             
@@ -132,11 +132,11 @@ class OrganizeWorkflow:
                 full_thought_logs.append(f"[KeywordExtractor - {res['file_name']}]: {res['thought_log']}")
             else:
                 if "error" in res and res["error"] != "No text":
-                    agent_logger.error(f"Lỗi rút keyword file {res['file_name']}: {res['error']}")
+                    agent_logger.error(f"Error extracting keywords for file {res['file_name']}: {res['error']}")
                 enhanced_file_list.append(res['file_name'])
 
-        # --- BƯỚC 3: PHÂN LOẠI THƯ MỤC CÓ REVIEW ---
-        agent_logger.info("🧠 Đang suy luận cách phân bổ thư mục...")
+        # --- STEP 3: FOLDER CLASSIFICATION WITH REVIEW ---
+        agent_logger.info("Reasoning about folder allocation...")
         max_attempts = 2
         attempt = 0
         is_acceptable = False
@@ -152,14 +152,14 @@ class OrganizeWorkflow:
                 
             result = self.organizer.organize_files(prompt_with_feedback, enhanced_file_list)
             
-            # Đánh giá kết quả
+            # Evaluate result
             review = self.reviewer.review_organize(task.prompt_template, result.thought_log)
             if review.is_acceptable:
                 is_acceptable = True
                 full_thought_logs.append(f"[FileOrganizer - Attempt {attempt}]: {result.thought_log}\n[Reviewer Audit]: OK. Accepted.")
                 
-                # --- BƯỚC: LƯU VÀO FOLDER VẬT LÝ ---
-                agent_logger.info("Đang thực hiện phân bổ file vật lý vào thư mục cục bộ...")
+                # --- STEP: SAVE TO PHYSICAL FOLDER ---
+                agent_logger.info("Allocating physical files to local folders...")
                 import shutil
                 organized_dir = self.download_dir / "organized_output" / task.task_id
                 
@@ -171,9 +171,9 @@ class OrganizeWorkflow:
                         folder_desc = allocation.folder_name
                         
                         if filename in name_to_path:
-                            # Trích xuất mỗi tên thư mục (bỏ đoạn mô tả đi) cho gọn gàng và tránh ký tự đặc biệt của Windows
+                            # Extract only the folder name (removing description) to keep it clean and avoid Windows special characters
                             clean_folder_name = folder_desc.split(":")[0].strip()
-                            # Clean string cho chắc ăn với Windows
+                            # Clean string safely for Windows
                             clean_folder_name = "".join(c for c in clean_folder_name if c not in r'\/:*?"<>|')
                             
                             target_folder = organized_dir / clean_folder_name
@@ -182,22 +182,22 @@ class OrganizeWorkflow:
                             src_path = name_to_path[filename]
                             dst_path = target_folder / filename
                             shutil.copy2(src_path, dst_path)
-                            agent_logger.debug(f"Đã tải {filename} vào '{clean_folder_name}'")
-                    agent_logger.info(f"Đã lưu ổ cứng thành công tại {organized_dir}")
+                            agent_logger.debug(f"Saved {filename} to '{clean_folder_name}'")
+                    agent_logger.info(f"Successfully saved to disk at {organized_dir}")
                 except Exception as e:
-                    agent_logger.error(f"Lỗi khi di chuyển file vật lý: {e}")
+                    agent_logger.error(f"Error moving physical file: {e}")
             else:
                 issues_history.extend(review.issues)
                 full_thought_logs.append(f"[FileOrganizer - Attempt {attempt}]: {result.thought_log}\n[Reviewer REJECTED]: {review.issues}")
-                agent_logger.warning(f"⚠️ Reviewer phát hiện lỗi phân loại: {review.issues}. Yêu cầu FileOrganizer sửa lỗi...")
+                agent_logger.warning(f"Reviewer detected classification errors: {review.issues}. Requesting FileOrganizer to fix...")
 
-        # Nộp bài
+        # Submit task
         submit_response = self.provider.submit_task(
             task_id=task.task_id,
             answers=[],  
             thought_log="\n".join(full_thought_logs),
             used_tools=["KeywordExtractor", "FileOrganizer", "Reviewer"]
         )
-        agent_logger.info(f"Đã nộp bài Organize! Server: {submit_response}")
+        agent_logger.info(f"Submitted Organize task! Server response: {submit_response}")
 
 

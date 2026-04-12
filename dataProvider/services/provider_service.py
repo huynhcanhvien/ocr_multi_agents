@@ -15,7 +15,7 @@ class ProviderService:
             access_token=data['access_token'],
             expires_in=data['expires_in']
         )
-        # Cập nhật token cho các request sau
+        # Update token for subsequent requests
         self.client.set_bearer_token(self.session.access_token)
         return self.session
 
@@ -25,7 +25,7 @@ class ProviderService:
         return Task(task_id=data['task_id'], prompt_template=data['prompt_template'], resources=resources)
 
     def download_file(self, download_token, save_path):
-        """Tải file dạng stream để tiết kiệm RAM"""
+        """Download file as stream to save RAM"""
         params = {"token": download_token}
         response = self.client.get("/download", params=params, stream=True)
         with open(save_path, 'wb') as f:

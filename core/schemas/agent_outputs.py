@@ -30,7 +30,7 @@ class KeywordExtractResult(BaseModel):
 
 
 class PlannerResult(BaseModel):
-    """Output of PlannerAgent: The tactical extraction plan."""
+    """Output of PlannerAgent: The detailed extraction plan."""
     thought_log: str = Field(
         ...,
         description="Full analytical reasoning: What does this document contain? Where should we look? What are the specific target goals?"
@@ -45,7 +45,7 @@ class PlannerResult(BaseModel):
     )
 
 class ExtractionResult(BaseModel):
-    """Output of ExtractorAgent: The result of data scraping from a single chunk."""
+    """Output of ExtractorAgent: The result of data extraction from a single chunk."""
     thought_log: str = Field(
         ...,
         description="The process of scanning details in the chunk: What was seen? Why is it useful or not useful?"

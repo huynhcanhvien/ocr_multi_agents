@@ -7,14 +7,14 @@ from ..schemas.agent_outputs import ExtractionResult
 
 class ExtractorAgent(BaseAgent):
     def __init__(self):
-        # Nhiệt độ thấp để bám sát văn bản, tránh bịa đặt
+        # Low temperature to adhere strictly to text, avoiding hallucinations
         super().__init__(agent_name="Extractor", temperature=settings.TEMP_EXTRACTOR)
 
     def extract_from_chunk(self, chunk: DocumentChunk, guidelines: str, keywords: list[str]) -> ExtractionResult:
         is_image = chunk.chunk_type == "image"
         
-        # Nếu là ảnh, ta không đưa nội dung Base64 vào chuỗi prompt text (để tránh lỗi token)
-        # Thay vào đó, ta truyền riêng cho BaseAgent xử lý Vision.
+        # If it's an image, we do not include Base64 content in the text prompt (to avoid token limits)
+        # Instead, we pass it separately to BaseAgent for Vision processing.
         content_for_prompt = "[Image Content: See attachment]" if is_image else chunk.content
         image_to_send = chunk.content if is_image else None
 

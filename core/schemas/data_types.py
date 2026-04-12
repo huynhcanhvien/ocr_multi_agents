@@ -4,11 +4,11 @@ from typing import Literal, Optional
 
 class DocumentChunk(BaseModel):
     """
-    Đại diện cho 1 mảnh tài liệu đã được băm nhỏ (1 Ảnh, 1 Sheet Excel, hoặc 1 Đoạn Text).
-    Đây là "vật liệu" sẽ được nạp cho Extractor Agent.
+    Represents a parsed document chunk (1 Image, 1 Excel Sheet, or 1 Text Chunk).
+    This is the input material for the Extractor Agent.
     """
     chunk_type: Literal["text", "image", "table"]
-    content: str = Field(..., description="Nội dung Text, Markdown Table, hoặc Base64 Image")
+    content: str = Field(..., description="Content String, Markdown Table, or Base64 Image")
     file_name: str
     page_number: Optional[int] = None
     
@@ -19,8 +19,8 @@ class DocumentChunk(BaseModel):
 
 class TaskContext(BaseModel):
     """
-    Lưu trữ ngữ cảnh của toàn bộ Task hiện tại. 
-    Tránh việc truyền quá nhiều tham số lẻ tẻ vào các hàm.
+    Stores the context of the entire current Task. 
+    Avoids passing too many discrete parameters between functions.
     """
     task_id: str
     original_prompt: str

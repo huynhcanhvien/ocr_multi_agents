@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from dataProvider import ProviderService
 
-# 1. Load biến môi trường từ file .env
+# 1. Load environment variables from .env file
 load_dotenv()
 
 API_KEY = os.getenv("COMPETITION_API_KEY")
@@ -10,61 +10,61 @@ BASE_URL = os.getenv("BASE_URL")
 
 def check_env():
     if not API_KEY or not BASE_URL:
-        print("❌ Lỗi: Chưa tìm thấy API_KEY hoặc BASE_URL trong file .env!")
+        print("[ERROR] API_KEY or BASE_URL not found in .env file!")
         return False
     return True
 def main():
     if not check_env():
         return
-    print("🚀 Bắt đầu test module dataProvider...\n")
+    print("[INFO] Starting dataProvider module test...\n")
     
-    # Khởi tạo Service
+    # Initialize Service
     provider = ProviderService(base_url=BASE_URL, api_key=API_KEY)
     
-    # Bước 1: Tạo Session
-    print(" Đang tạo session mới...")
+    # Step 1: Create Session
+    print(" Creating new session...")
     session = provider.create_session()
-    print("Đã tạo Session thành công!")
+    print("Session completely created!")
     print(f"   - Session ID: {session.session_id}")
-    print(f"   - Token hết hạn sau: {session.expires_in} giây\n")
+    print(f"   - Token expires in: {session.expires_in} seconds\n")
     
-    # Bước 2: Lấy Task
-    print(" Đang lấy task tiếp theo...")
+    # Step 2: Fetch Task
+    print(" Fetching next task...")
     task = provider.get_next_task()
-    print("Đã lấy Task thành công!")
+    print("Task successfully fetched!")
     print(f"   - Task ID: {task.task_id}")
     print(f"   - Prompt: {task.prompt_template}")
-    print(f"   - Số lượng tài liệu đính kèm: {len(task.resources)} file\n")
+    print(f"   - Number of attached documents: {len(task.resources)} files\n")
     
-    # Bước 3: Download file (Dạng stream)
+    # Step 3: Download file (Stream format)
     if not task.resources:
-        print("ℹ️ Task này không có tài liệu đính kèm.")
+        print("[INFO] This task has no attached documents.")
         return
 
-    print(" Đang tiến hành tải tài liệu...")
+    print(" Proceeding to download documents...")
     
-    # Thư mục gốc để lưu data tải về
+    # Root directory for downloaded data
     base_download_dir = "downloaded_data"
     
     for i, res in enumerate(task.resources, 1):
-        # res.file_path có dạng: "Public/01_masked_.../xxx.pdf"
-        # Tạo đường dẫn local: "downloaded_data/Public/01_masked_.../xxx.pdf"
+        # res.file_path format: "Public/01_masked_.../xxx.pdf"
+        # Create local path: "downloaded_data/Public/01_masked_.../xxx.pdf"
         local_file_path = os.path.join(base_download_dir, res.file_path)
         
-        # Lấy phần thư mục để tạo trước (VD: "downloaded_data/Public/01_masked_...")
+        # Get directory correctly to pre-create (e.g. "downloaded_data/Public/01_masked_...")
         local_dir = os.path.dirname(local_file_path)
         os.makedirs(local_dir, exist_ok=True)
         
-        print(f"   [{i}/{len(task.resources)}] Đang tải: {res.file_path.split('/')[-1]} ...")
+        print(f"   [{i}/{len(task.resources)}] Downloading: {res.file_path.split('/')[-1]} ...")
         
         try:
-            # Gọi hàm download
+            # Call download function
             saved_path = provider.download_file(download_token=res.token, save_path=local_file_path)
-            print(f"   ️ Đã lưu tại: {saved_path}")
+            print(f"   [SUCCESS] Saved to: {saved_path}")
         except Exception as e:
-            print(f"   Lỗi khi tải file {res.file_path}: {e}")
+            print(f"   Error downloading file {res.file_path}: {e}")
 
-    print("\n Hoàn tất quá trình test (Chưa submit).")
+    print("\n Test process completed (Not submitting).")
 
 if __name__ == "__main__":
     main()

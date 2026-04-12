@@ -10,21 +10,21 @@ class TestOrganizationFlow:
     @patch('requests.get')
     @patch('requests.post')
     def test_full_org_flow(self, mock_post, mock_get):
-        # 1. Giả lập dữ liệu từ DataProvider (Mẫu 5 của BTC)
+        # 1. Simulate data from DataProvider
         mock_get.return_value.json.return_value = {
             "task_id": "test_org_001",
-            "prompt_template": "Hãy phân loại tệp này vào đúng thư mục kỹ thuật.",
+            "prompt_template": "Classify this file into the correct technical folder.",
             "resources": [{"file_path": "tests/sample_data/bang_tien_do.xlsx", "file_type": "excel", "token": "abc"}]
         }
         
-        # 2. Bước Data Pipeline: Tải và Parse
-        # (Ở đây ta dùng file local trong sample_data để thay cho việc download thật)
+        # 2. Data Pipeline step: Download and Parse
+        # (Using local file in sample_data to mock real download)
         task_file = "tests/sample_data/bang_tien_do.xlsx"
         chunks = parse_file(task_file)
         
-        # 3. Bước Agent 1: TaskRouter (Quyết định luồng)
+        # 3. Agent 1 Step: TaskRouter (Determine flow)
         router = TaskRouterAgent()
-        route_result = router.classify_task("Hãy phân loại tệp này vào đúng thư mục kỹ thuật.")
+        route_result = router.classify_task("Classify this file into the correct technical folder.")
         
         assert route_result.task_type == "ORGANIZE"
         
@@ -37,9 +37,9 @@ class TestOrganizationFlow:
         keywords_str = ", ".join(kw_result.keywords)
         enhanced_file_list = [f"bang_tien_do.xlsx (Keywords: {keywords_str})"]
         
-        # 5. Bước Agent 2: FileOrganizer (Phân loại vào Taxonomy)
+        # 5. Agent 2 Step: FileOrganizer (Taxonomy Classification)
         organizer = FileOrganizerAgent()
-        org_result = organizer.organize_files("Phân loại theo quy định dự án", enhanced_file_list)
+        org_result = organizer.organize_files("Classify according to project rules", enhanced_file_list)
         
         assert len(org_result.thought_log) > 0
-        print(f"\nLuồng Organization OK. AI suy luận:\n{org_result.thought_log[:100]}...")
+        print(f"\nOrganization flow OK. AI reasoning:\n{org_result.thought_log[:100]}...")

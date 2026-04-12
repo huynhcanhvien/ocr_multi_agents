@@ -8,27 +8,27 @@ if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-# Đảm bảo thư mục logs tồn tại
+# Ensure logs directory exists
 log_dir = Path("logs")
 log_dir.mkdir(exist_ok=True)
 
-# Xóa cấu hình mặc định mờ nhạt của Python
+# Remove the bland default Python configuration
 logger.remove()
 
-# 1. Log ra màn hình Terminal (Có màu sắc để dễ nhìn)
+# 1. Log to Terminal (Colorized for readability)
 logger.add(
     sys.stdout, 
     colorize=True, 
     format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>",
-    level="INFO" # Đi thi thì để INFO cho đỡ rối mắt
+    level="INFO" # Keep as INFO for competition to avoid clutter
 )
 
-# 2. Log ra file (Lưu giữ mọi thứ kể cả DEBUG để traceback khi submit sai)
+# 2. Log to file (Keep everything including DEBUG for traceback on wrong submission)
 logger.add(
     "logs/agent_pipeline.log", 
-    rotation="10 MB",     # Đầy 10MB tự tạo file mới
-    retention="3 days",   # Xóa log cũ sau 3 ngày
-    compression="zip",    # Nén file log cũ
+    rotation="10 MB",     # Automatically create new file when 10MB is reached
+    retention="3 days",   # Delete old logs after 3 days
+    compression="zip",    # Compress old log files
     format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
     level="DEBUG",
     encoding="utf-8"

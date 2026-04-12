@@ -29,11 +29,11 @@ VALID_FOLDERS = [
 
 class FileOrganizerAgent(BaseAgent):
     def __init__(self):
-        # Nhiệt độ 0.0 để đảm bảo tính chính xác tuyệt đối khi map tên thư mục
+        # Temperature 0.0 to ensure absolute accuracy when mapping folder names
         super().__init__(agent_name="FileOrganizer", temperature=0.0)
 
     def organize_files(self, task_prompt: str, file_list: list[str]) -> OrganizeResult:
-        # Truyền thêm VALID_FOLDERS vào prompt
+        # Pass VALID_FOLDERS into prompt
         user_prompt = get_organizer_user_prompt(task_prompt, file_list, VALID_FOLDERS)
         
         return self.call_llm(

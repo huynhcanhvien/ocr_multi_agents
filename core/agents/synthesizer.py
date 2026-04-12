@@ -6,7 +6,7 @@ from ..schemas.agent_outputs import SynthesisResult
 
 class SynthesizerAgent(BaseAgent):
     def __init__(self):
-        # Nhiệt độ hơi nhích lên một chút để có thể viết văn bản / thought log mượt mà
+        # Slightly higher temperature for smoother textual output / thought log
         super().__init__(agent_name="Synthesizer", temperature=settings.TEMP_SYNTHESIZER)
 
     def synthesize_final_answer(self, task_prompt: str, extracted_pieces: list[dict]) -> SynthesisResult:

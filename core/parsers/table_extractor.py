@@ -18,11 +18,11 @@ def extract_tables(file_path: str) -> list[DocumentChunk]:
             ))
             
         elif path.suffix in ['.xlsx', '.xls']:
-            # Đọc từng sheet trong Excel
+            # Read each sheet in Excel
             xls = pd.ExcelFile(file_path)
             for sheet_name in xls.sheet_names:
                 df = pd.read_excel(xls, sheet_name=sheet_name)
-                # Lọc bỏ các cột/hàng rỗng hoàn toàn để tiết kiệm token
+                # Filter out completely empty columns/rows to save tokens
                 df.dropna(how='all', inplace=True)
                 df.dropna(axis=1, how='all', inplace=True)
                 
@@ -31,9 +31,9 @@ def extract_tables(file_path: str) -> list[DocumentChunk]:
                     chunk_type="table", content=markdown_table, file_name=path.name, page_number=1
                 ))
                 
-        agent_logger.success(f"Đã chuyển đổi {path.name} thành Markdown Table.")
+        agent_logger.success(f"Successfully converted {path.name} to Markdown Table.")
         return chunks
         
     except Exception as e:
-        agent_logger.error(f"Lỗi đọc file bảng tính {path.name}: {e}")
-        raise ParsingError(f"Không thể parse Excel/CSV: {str(e)}")
+        agent_logger.error(f"Error reading spreadsheet file {path.name}: {e}")
+        raise ParsingError(f"Cannot parse Excel/CSV: {str(e)}")

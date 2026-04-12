@@ -6,7 +6,7 @@ from ..schemas.agent_outputs import PlannerResult
 
 class PlannerAgent(BaseAgent):
     def __init__(self):
-        super().__init__(agent_name="Planner", temperature=settings.TEMP_ROUTER) # Cần sự logic cao
+        super().__init__(agent_name="Planner", temperature=settings.TEMP_ROUTER) # Requires high logic
 
     def create_extraction_plan(self, task_prompt: str) -> PlannerResult:
         user_prompt = get_planner_user_prompt(task_prompt)

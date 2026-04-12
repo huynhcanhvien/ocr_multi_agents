@@ -1,21 +1,21 @@
 # core/exceptions/agent_errors.py
 
 class BaseSystemError(Exception):
-    """Class cha cho mọi lỗi trong hệ thống OCR Multi-Agents."""
+    """Base class for all exceptions in the OCR Multi-Agent system."""
     pass
 
 class SystemConfigError(BaseSystemError):
-    """Lỗi văng ra ngay khi khởi động nếu thiếu API Key hoặc sai định dạng cấu hình."""
+    """Error raised at startup if API Key is missing or configuration format is invalid."""
     pass
 
 class DataProviderError(BaseSystemError):
-    """Lỗi khi giao tiếp với Server cuộc thi (Download xịt, Submit lỗi)."""
+    """Error when communicating with the Competition Server (Download failure, Submit error)."""
     pass
 
 class LLMCommunicationError(BaseSystemError):
-    """Lỗi khi gọi OpenAI API (Timeout, Rate Limit, hoặc API sập)."""
+    """Error when calling OpenAI API (Timeout, Rate Limit, or API downtime)."""
     pass
 
 class ParsingError(BaseSystemError):
-    """Lỗi khi không thể đọc được file PDF, Excel hoặc Ảnh."""
+    """Error when unable to parse PDF, Excel, or Image files."""
     pass

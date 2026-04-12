@@ -6,29 +6,28 @@ from core.pipeline import SystemPipeline
 from core.utils.logger import agent_logger
 
 def main():
-    # 1. Load các biến môi trường
+    # 1. Load environment variables
     load_dotenv()
     
-    agent_logger.info("HỆ THỐNG OCR MULTI-AGENTS ĐÃ KHỞI ĐỘNG ")
+    agent_logger.info("OCR MULTI-AGENTS SYSTEM STARTED")
     
     try:
-        # 2. Khởi tạo DataProvider (Giao tiếp Server)
+        # 2. Initialize DataProvider (Server Communication)
         provider = ProviderService(
             base_url=settings.BASE_URL, 
             api_key=settings.COMPETITION_API_KEY
         )
         provider.create_session()
         
-        # 3. Gắn DataProvider vào Pipeline
+        # 3. Attach DataProvider to Pipeline
         pipeline = SystemPipeline(provider)
         
-        # 4. Kích hoạt vòng lặp thi đấu tự động
-        # (Nếu đang test, bạn có thể gọi pipeline.process_single_task() thay vì run_continuous)
+        # 4. Activate autonomous competition loop
         # pipeline.process_single_task()
         pipeline.run_continuous()
         
     except Exception as e:
-        agent_logger.critical(f"Hệ thống sập do lỗi ở cấp cao nhất: {e}")
+        agent_logger.critical(f"System crashed due to top-level error: {e}")
 
 if __name__ == "__main__":
     main()
